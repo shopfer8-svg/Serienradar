@@ -1,0 +1,689 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#14161c">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Serienradar</title>
+<style>
+/* Layout: eine Spalte, Suchfeld oben, darunter eine Karte pro Serie, sortiert nach dem naechsten Termin. */
+:root{
+  --bg:#f3f4f7; --card:#ffffff; --fg:#161922; --muted:#667085; --line:#dfe2ea;
+  --accent:#e4572e; --accent-fg:#ffffff; --mine:#e8f3ee; --mine-fg:#14614a; --other:#eceef3; --other-fg:#5a6275;
+  --new:#e4572e; --soon:#b7791f; --soon-bg:#fbf1dc; --new-bg:#fde8e1; --ok-bg:#e8f3ee;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#101218; --card:#1a1d26; --fg:#eceef4; --muted:#9aa2b4; --line:#2a2e3b;
+    --accent:#ff7a50; --accent-fg:#1a0d06; --mine:#16352b; --mine-fg:#7fe0b8; --other:#252936; --other-fg:#a5adbf;
+    --new:#ff7a50; --soon:#f0c36a; --soon-bg:#3a2f14; --new-bg:#3d2018; --ok-bg:#16352b;
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-top:max(12px,env(safe-area-inset-top,0px));padding-bottom:max(24px,env(safe-area-inset-bottom,0px))}
+main{max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+h1{font-size:1.5rem;margin:0;letter-spacing:-.01em}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:4px}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.iconbtn{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 12px;min-height:44px}
+.search{position:relative}
+.search input{width:100%;min-height:48px;padding:10px 14px;border-radius:12px;border:1px solid var(--line);background:var(--card)}
+.results{margin-top:8px;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.res{display:flex;gap:12px;align-items:center;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--line);padding:10px 12px;min-height:64px}
+.res:last-child{border-bottom:0}
+.res .t{flex:1;min-width:0}
+.res .t b{display:block;overflow-wrap:anywhere}
+.res .t span{color:var(--muted);font-size:.85rem}
+.ov{font-size:.8rem;color:var(--muted);margin-top:2px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.add{flex:none;font-weight:600;color:var(--accent)}
+.add.done{color:var(--muted)}
+.thumb{flex:none;width:44px;height:64px;border-radius:6px;background:var(--other);object-fit:cover}
+.list{display:flex;flex-direction:column;gap:12px;margin:0;padding:0;list-style:none}
+.show{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;display:flex;gap:12px}
+.show .poster{flex:none;width:72px;height:108px;border-radius:8px;background:var(--other);object-fit:cover}
+.body{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+.top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.top h2{margin:0;font-size:1.05rem;line-height:1.25;overflow-wrap:anywhere}
+.rm{flex:none;background:none;border:0;color:var(--muted);font-size:.8rem;padding:6px 4px;min-height:32px}
+.rm.sure{color:var(--new);font-weight:600}
+.next{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center}
+.pill{display:inline-block;border-radius:999px;padding:3px 10px;font-size:.8rem;font-weight:600}
+.pill.new{background:var(--new-bg);color:var(--new)}
+.pill.soon{background:var(--soon-bg);color:var(--soon)}
+.pill.ok{background:var(--ok-bg);color:var(--mine-fg)}
+.pill.off{background:var(--other);color:var(--other-fg)}
+.when{font-size:.9rem}
+.sub{color:var(--muted);font-size:.85rem}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border-radius:8px;padding:3px 9px;font-size:.8rem;background:var(--other);color:var(--other-fg)}
+.chip.paid{background:var(--soon-bg);color:var(--soon)}
+.chip.mine{background:var(--mine);color:var(--mine-fg);font-weight:600}
+.empty,.setup{background:var(--card);border:1px dashed var(--line);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:10px}
+.setup{border-style:solid}
+.setup ol{margin:0;padding-left:1.2em;display:flex;flex-direction:column;gap:6px}
+.setup input{min-height:48px;padding:10px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);width:100%}
+.primary{background:var(--accent);color:var(--accent-fg);border:0;border-radius:12px;padding:12px 16px;font-weight:700;min-height:48px}
+.msg{font-size:.9rem;color:var(--muted)}
+.msg.err{color:var(--new)}
+a{color:var(--accent)}
+.sheet{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:12px}
+.sheet h3{margin:0;font-size:1rem}
+.row{display:flex;flex-wrap:wrap;gap:8px}
+.tabs{display:flex;gap:8px}
+.tab{flex:1;min-height:44px;border-radius:12px;border:1px solid var(--line);background:var(--card)}
+.tab[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);font-weight:700}
+.fchips{display:flex;flex-wrap:wrap;gap:6px}
+.fchip{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 12px;min-height:36px;font-size:.85rem}
+.fchip[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);font-weight:600}
+.eplist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.ep{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:4px;cursor:pointer}
+.eph{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.epo{font-size:.9rem;color:var(--muted);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.epo.open{display:block}
+.linkbtn{align-self:flex-start;background:none;border:0;color:var(--accent);font-weight:600;padding:6px 0;min-height:36px}
+.field{width:100%;min-height:48px;padding:10px 14px;border-radius:12px;border:1px solid var(--line);background:var(--card)}
+footer{font-size:.75rem;color:var(--muted);text-align:center;padding-top:8px}
+.bar{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<main id="app"></main>
+<script>
+(function(){
+"use strict";
+var BASE="https://api.themoviedb.org/3", IMG="https://image.tmdb.org/t/p/";
+var REGION="DE", STALE_MS=6*3600*1000;
+var MINE=[/netflix/i,/prime/i,/disney/i,/apple\s*tv/i,/hbo|^max\b/i,/joyn/i,/^wow/i];
+
+var memStore=null;
+function load(){
+  try{var s=localStorage.getItem("serienradar.v1"); if(s) return JSON.parse(s);}catch(e){}
+  return memStore||{key:"",shows:[],cache:{}};
+}
+var S=load();
+S.key=S.key||""; S.shows=Array.isArray(S.shows)?S.shows:[]; S.cache=S.cache||{};
+S.shows.forEach(function(x){ x.type=x.type==="movie"?"movie":"tv"; });
+function K(x){ return (x.type==="movie"?"m":"t")+x.id; }
+Object.keys(S.cache).forEach(function(k){ var c=S.cache[k]; if(!c||!c.d||c.d.v!==3) delete S.cache[k]; });
+function save(){ memStore=S; try{localStorage.setItem("serienradar.v1",JSON.stringify(S));}catch(e){} }
+
+var ui={view:"list",ep:{q:"",res:null,searching:false,show:null,loading:false,err:"",data:null,filter:"",season:"all",limit:40,open:{}},details:{},rt:null,results:null,query:"",searching:false,msg:"",err:"",settings:false,confirm:null,refreshing:false,keyMsg:"",keyErr:false};
+var app=document.getElementById("app");
+
+function h(tag,attrs,kids){
+  var el=document.createElement(tag);
+  if(attrs) for(var k in attrs){
+    var v=attrs[k];
+    if(k==="class") el.className=v;
+    else if(k==="text") el.textContent=v;
+    else if(k.slice(0,2)==="on") el.addEventListener(k.slice(2),v);
+    else if(v===true) el.setAttribute(k,"");
+    else if(v!==false && v!=null) el.setAttribute(k,v);
+  }
+  (kids||[]).forEach(function(c){ if(c!=null) el.appendChild(typeof c==="string"?document.createTextNode(c):c); });
+  return el;
+}
+
+function api(path,params){
+  var p=new URLSearchParams(Object.assign({language:"de-DE"},params||{}));
+  var headers={};
+  if(S.key.length>40) headers.Authorization="Bearer "+S.key; else p.set("api_key",S.key);
+  return fetch(BASE+path+"?"+p.toString(),{headers:headers}).then(function(r){
+    if(r.status===401) throw new Error("key");
+    if(!r.ok) throw new Error("http "+r.status);
+    return r.json();
+  });
+}
+
+/* Datum */
+function parseDay(s){ if(!s) return null; var a=s.split("-"); return new Date(+a[0],+a[1]-1,+a[2]); }
+function today(){ var d=new Date(); return new Date(d.getFullYear(),d.getMonth(),d.getDate()); }
+function diffDays(d){ return Math.round((d-today())/86400000); }
+function fmt(d){ return d.toLocaleDateString("de-DE",{weekday:"short",day:"2-digit",month:"2-digit",year:"numeric"}); }
+function rel(n){
+  if(n===0) return "heute"; if(n===1) return "morgen"; if(n===-1) return "gestern";
+  if(n>0) return "in "+n+" Tagen"; return "vor "+(-n)+" Tagen";
+}
+
+/* Daten einer Serie oder eines Films aufbereiten */
+function dayOf(iso){ return (iso||"").slice(0,10); }
+function summarize(raw,type){
+  var wp=(raw["watch/providers"]&&raw["watch/providers"].results&&raw["watch/providers"].results[REGION])||{};
+  var map={}, provs=[];
+  ["flatrate","free","ads","rent","buy"].forEach(function(k){
+    (wp[k]||[]).forEach(function(p){
+      var e=map[p.provider_name];
+      if(!e){ e=map[p.provider_name]={name:p.provider_name,kinds:[]}; provs.push(e); }
+      if(e.kinds.indexOf(k)<0) e.kinds.push(k);
+    });
+  });
+  provs.forEach(function(e){
+    e.incl=e.kinds.some(function(k){return k==="flatrate"||k==="free"||k==="ads";});
+    e.mine=e.incl&&MINE.some(function(rx){return rx.test(e.name);});
+  });
+  provs.sort(function(a,b){return ((b.mine?2:0)+(b.incl?1:0))-((a.mine?2:0)+(a.incl?1:0));});
+  if(type==="movie"){
+    var rd=(raw.release_dates&&raw.release_dates.results)||[], de=null;
+    rd.forEach(function(x){ if(x.iso_3166_1===REGION) de=x; });
+    var kino=null, dig=null;
+    ((de&&de.release_dates)||[]).forEach(function(x){
+      var d=dayOf(x.release_date); if(!d) return;
+      if(x.type===2||x.type===3){ if(!kino||d<kino) kino=d; }
+      if(x.type===4){ if(!dig||d<dig) dig=d; }
+    });
+    var events=[];
+    if(kino) events.push({date:kino,kind:"kino"});
+    if(dig) events.push({date:dig,kind:"digital"});
+    if(!events.length&&raw.release_date) events.push({date:dayOf(raw.release_date),kind:"welt"});
+    return {id:raw.id,type:"movie",name:raw.title,poster:raw.poster_path||"",status:raw.status,runtime:raw.runtime||0,events:events,provs:provs,v:3};
+  }
+  var ne=raw.next_episode_to_air, le=raw.last_episode_to_air;
+  return {
+    id:raw.id,type:"tv",name:raw.name,poster:raw.poster_path||"",status:raw.status,seasons:raw.number_of_seasons,
+    next:ne&&ne.air_date?{date:ne.air_date,s:ne.season_number,e:ne.episode_number,title:ne.name||""}:null,
+    last:le&&le.air_date?{date:le.air_date,s:le.season_number,e:le.episode_number,title:le.name||""}:null,
+    provs:provs, v:3
+  };
+}
+/* Naechster und letzter Termin; bei Filmen aus den Terminen berechnet */
+function view(d){
+  if(!d) return {next:null,last:null};
+  if(d.type!=="movie") return {next:d.next,last:d.last};
+  var ev=(d.events||[]).slice().sort(function(a,b){return a.date<b.date?-1:1;}), nx=null, ls=null;
+  ev.forEach(function(e){ if(diffDays(parseDay(e.date))>=0){ if(!nx) nx=e; } else ls=e; });
+  return {next:nx,last:ls};
+}
+function fetchDetail(x){
+  if(x.type==="movie") return api("/movie/"+x.id,{append_to_response:"watch/providers,release_dates"}).then(function(raw){return summarize(raw,"movie");});
+  return api("/tv/"+x.id,{append_to_response:"watch/providers"}).then(function(raw){return summarize(raw,"tv");});
+}
+function refreshOne(x){
+  return fetchDetail(x).then(function(d){ S.cache[K(x)]={t:Date.now(),d:d}; });
+}
+function refreshAll(force){
+  if(!S.key||!S.shows.length) return Promise.resolve();
+  var todo=S.shows.filter(function(s){var c=S.cache[K(s)]; return force||!c||c.d.v!==3||Date.now()-c.t>STALE_MS;});
+  if(!todo.length) return Promise.resolve();
+  ui.refreshing=true; ui.err=""; render();
+  return Promise.all(todo.map(function(s){return refreshOne(s).catch(function(e){return e;});}))
+    .then(function(res){
+      var bad=res.filter(function(r){return r instanceof Error;});
+      if(bad.some(function(e){return e.message==="key";})) ui.err="Der API-Schlüssel wird nicht akzeptiert. Bitte in den Einstellungen prüfen.";
+      else if(bad.length) ui.err="Bei "+bad.length+" Titel(n) hat das Aktualisieren nicht geklappt. Bitte später nochmal versuchen.";
+      save();
+    }).then(function(){ui.refreshing=false; render();});
+}
+
+/* Folgensuche */
+var EPS={}, EPS_KEY="serienradar.eps.v1", EPS_MAX_AGE=7*86400000;
+try{ EPS=JSON.parse(localStorage.getItem(EPS_KEY)||"{}")||{}; }catch(e){ EPS={}; }
+function saveEps(){
+  try{ localStorage.setItem(EPS_KEY,JSON.stringify(EPS)); }
+  catch(e){
+    var ks=Object.keys(EPS).sort(function(a,b){return EPS[a].t-EPS[b].t;});
+    while(ks.length>1){ delete EPS[ks.shift()]; try{ localStorage.setItem(EPS_KEY,JSON.stringify(EPS)); return; }catch(e2){} }
+  }
+}
+function norm(t){ return String(t||"").toLowerCase().replace(/ß/g,"ss").normalize("NFD").replace(/[\u0300-\u036f]/g,""); }
+/* Uebersetzung Englisch -> Deutsch ueber MyMemory (kostenlos, mit Tageslimit) */
+function decodeHtml(t){ var ta=document.createElement("textarea"); ta.innerHTML=t; return ta.value; }
+function translateText(text){
+  var parts=text.match(/[^.!?]+[.!?]*\s*/g)||[text], chunks=[], cur="";
+  parts.forEach(function(p){
+    if(cur&&(cur+p).length>420){ chunks.push(cur); cur=""; }
+    while(p.length>420){ chunks.push(p.slice(0,420)); p=p.slice(420); }
+    cur+=p;
+  });
+  if(cur) chunks.push(cur);
+  var out=[];
+  return chunks.reduce(function(prev,c){
+    return prev.then(function(){
+      return fetch("https://api.mymemory.translated.net/get?langpair=en|de&q="+encodeURIComponent(c)).then(function(r){
+        if(!r.ok) throw new Error("http");
+        return r.json();
+      }).then(function(j){
+        var t=j&&j.responseData&&j.responseData.translatedText;
+        if(!t||+j.responseStatus!==200||/MYMEMORY WARNING|QUERY LENGTH LIMIT/i.test(t)) throw new Error("limit");
+        out.push(decodeHtml(t));
+      });
+    });
+  },Promise.resolve()).then(function(){ return out.join(" ").replace(/\s+/g," ").trim(); });
+}
+var trBusy={}, trErr={};
+function translateEp(e){
+  var key=e.s+"|"+e.e;
+  trBusy[key]=true; delete trErr[key]; render();
+  translateText(e.enOv||"").then(function(t){
+    e.tr=t; delete trBusy[key]; saveEps(); render();
+  }).catch(function(err){
+    delete trBusy[key]; trErr[key]=err.message==="limit"?"Das Tageslimit des Übersetzers ist erreicht. Morgen wieder oder über Google übersetzen.":"Übersetzung gerade nicht möglich. Internet prüfen oder über Google übersetzen."; render();
+  });
+}
+function fetchEpisodes(id){
+  return api("/tv/"+id).then(function(tv){
+    var nums=(tv.seasons||[]).map(function(x){return x.season_number;});
+    var batches=[], i; for(i=0;i<nums.length;i+=20) batches.push(nums.slice(i,i+20));
+    var jobs=[];
+    batches.forEach(function(b){
+      ["de-DE","en-US"].forEach(function(lang){
+        jobs.push(api("/tv/"+id,{language:lang,append_to_response:b.map(function(n){return "season/"+n;}).join(",")}).then(function(raw){return {lang:lang,raw:raw,b:b};}));
+      });
+    });
+    return Promise.all(jobs).then(function(rs){
+      var map={};
+      rs.forEach(function(r){ r.b.forEach(function(n){
+        var se=r.raw["season/"+n]; if(!se||!se.episodes) return;
+        se.episodes.forEach(function(ep){
+          var k=n+"|"+ep.episode_number;
+          var o=map[k]||(map[k]={s:n,e:ep.episode_number,name:"",ov:"",enName:"",enOv:"",date:""});
+          if(r.lang==="de-DE"){ o.name=ep.name||""; o.ov=ep.overview||""; o.date=ep.air_date||""; }
+          else { o.enName=ep.name||""; o.enOv=ep.overview||""; if(!o.date) o.date=ep.air_date||""; }
+        });
+      }); });
+      return {t:Date.now(),name:tv.name,seasons:nums,eps:Object.keys(map).map(function(k){return map[k];})};
+    });
+  });
+}
+function selectSeries(x){
+  var E=ui.ep; E.show={id:x.id,name:x.name}; E.res=null; E.q=""; E.filter=""; E.season="all"; E.limit=40; E.open={}; E.err=""; E.data=null;
+  var c=EPS[x.id];
+  if(c&&Date.now()-c.t<EPS_MAX_AGE){ E.data=c; E.loading=false; render(); return; }
+  E.loading=true; render();
+  fetchEpisodes(x.id).then(function(d){
+    EPS[x.id]=d; saveEps();
+    if(E.show&&E.show.id===x.id){ E.data=d; E.loading=false; render(); }
+  }).catch(function(e){
+    if(E.show&&E.show.id===x.id){ E.loading=false; E.err=e.message==="key"?"Der API-Schlüssel wird nicht akzeptiert.":"Die Folgen konnten nicht geladen werden. Internet prüfen und nochmal versuchen."; render(); }
+  });
+}
+var epDebounce=null;
+function doEpSearch(q){
+  var E=ui.ep; E.q=q;
+  if(!q.trim()){ E.res=null; E.searching=false; render(true); return; }
+  clearTimeout(epDebounce);
+  epDebounce=setTimeout(function(){
+    E.searching=true; render(true);
+    api("/search/tv",{query:q.trim()}).then(function(r){
+      if(E.q!==q) return;
+      E.res=(r.results||[]).slice(0,8); E.searching=false; E.err=""; render(true);
+    }).catch(function(){ E.searching=false; E.err="Die Suche hat nicht geklappt. Internet prüfen."; render(true); });
+  },350);
+}
+function epMatches(){
+  var E=ui.ep, toks=norm(E.filter).split(/\s+/).filter(Boolean);
+  return E.data.eps.filter(function(e){
+    if(E.season!=="all"&&e.s!==E.season) return false;
+    if(!toks.length) return true;
+    var hay=norm([e.name,e.ov,e.tr,e.enName,e.enOv].join(" "));
+    return toks.every(function(t){return hay.indexOf(t)>=0;});
+  }).sort(function(a,b){ return (a.s===0?1000:a.s)-(b.s===0?1000:b.s)||a.e-b.e; });
+}
+function epItem(e){
+  var E=ui.ep, key=e.s+"|"+e.e, open=!!E.open[key], special=e.s===0;
+  var title=e.name||e.enName||"Ohne Titel", en=!e.ov&&!!e.enOv, text=e.ov||e.tr||e.enOv, auto=!e.ov&&!!e.tr, needTr=en&&!e.tr;
+  var toggle=function(){ E.open[key]=!E.open[key]; render(); };
+  return h("li",{class:"ep",tabindex:"0",role:"button","aria-expanded":open?"true":"false",onclick:toggle,onkeydown:function(ev){ if(ev.target===ev.currentTarget&&(ev.key==="Enter"||ev.key===" ")){ ev.preventDefault(); toggle(); } }},[
+    h("div",{class:"eph"},[
+      h("span",{class:"pill "+(special?"soon":"off"),text:special?"Special "+e.e:"Staffel "+e.s+", Folge "+e.e}),
+      e.date?h("span",{class:"sub",text:parseDay(e.date).toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric"})}):null
+    ]),
+    h("b",{text:title}),
+    text?h("div",{class:"epo"+(open?" open":""),text:(auto?"(automatisch übersetzt) ":(en?"(Englisch) ":""))+text}):h("div",{class:"sub",text:"Keine Beschreibung vorhanden."}),
+    needTr?h("div",{class:"row",style:"align-items:center"},[
+      h("button",{class:"linkbtn",type:"button",disabled:!!trBusy[key],text:trBusy[key]?"Übersetze …":"Auf Deutsch übersetzen",onclick:function(ev){ev.stopPropagation();translateEp(e);}}),
+      h("a",{href:"https://translate.google.com/?sl=en&tl=de&op=translate&text="+encodeURIComponent((title+". "+e.enOv).slice(0,1500)),target:"_blank",rel:"noopener",text:"Bei Google öffnen",style:"font-size:.8rem",onclick:function(ev){ev.stopPropagation();}})
+    ]):null,
+    trErr[key]?h("div",{class:"msg err",text:trErr[key]}):null
+  ]);
+}
+function epsView(){
+  var E=ui.ep, box=h("div",{style:"display:flex;flex-direction:column;gap:12px"});
+  if(!E.show){
+    box.appendChild(h("input",{id:"eq",class:"field",type:"search",placeholder:"Serie wählen, z. B. Top Gear oder The Grand Tour",autocomplete:"off",value:E.q,oninput:function(ev){doEpSearch(ev.target.value);}}));
+    if(E.err) box.appendChild(h("div",{class:"msg err",role:"alert",text:E.err}));
+    if(E.q.trim()){
+      var rb=h("div",{class:"results"});
+      if(E.searching) rb.appendChild(h("div",{class:"msg",style:"padding:12px",text:"Suche …"}));
+      else if(!E.res||!E.res.length) rb.appendChild(h("div",{class:"msg",style:"padding:12px",text:"Keine Treffer."}));
+      else E.res.forEach(function(r){
+        var year=(r.first_air_date||"").slice(0,4);
+        rb.appendChild(h("button",{class:"res",type:"button",onclick:function(){selectSeries({id:r.id,name:r.name});}},[
+          r.poster_path?h("img",{class:"thumb",src:IMG+"w92"+r.poster_path,alt:""}):h("div",{class:"thumb"}),
+          h("div",{class:"t"},[h("b",{text:r.name}),h("span",{text:(year?year:"Jahr unbekannt")+((r.origin_country&&r.origin_country.length)?" · "+r.origin_country.join(", "):"")}),r.overview?h("div",{class:"ov",text:r.overview}):null]),
+          h("span",{class:"add",text:"Wählen"})
+        ]));
+      });
+      box.appendChild(rb);
+    } else {
+      var mine=S.shows.filter(function(x){return x.type!=="movie";});
+      if(mine.length){
+        box.appendChild(h("div",{class:"sub",text:"Aus deiner Liste:"}));
+        var fc=h("div",{class:"fchips"});
+        mine.forEach(function(x){ fc.appendChild(h("button",{class:"fchip",type:"button",text:x.name,onclick:function(){selectSeries(x);}})); });
+        box.appendChild(fc);
+      }
+      box.appendChild(h("div",{class:"msg",text:"Wähle eine Serie. Danach kannst du alle Folgen und Specials nach Stichwörtern durchsuchen, zum Beispiel „Wohnwagen“ oder „Zug“."}));
+    }
+    return box;
+  }
+  box.appendChild(h("div",{class:"bar"},[
+    h("b",{text:E.show.name}),
+    h("button",{class:"iconbtn",text:"Andere Serie",onclick:function(){E.show=null;E.data=null;E.err="";E.loading=false;render();}})
+  ]));
+  if(E.loading){ box.appendChild(h("div",{class:"msg",role:"status",text:"Lade alle Folgen … bei langen Serien dauert das einen Moment."})); return box; }
+  if(E.err||!E.data){ box.appendChild(h("div",{class:"msg err",role:"alert",text:E.err||"Keine Daten."})); return box; }
+  box.appendChild(h("input",{id:"ef",class:"field",type:"search",placeholder:"In Titel und Inhalt suchen, z. B. Wohnwagen",autocomplete:"off",value:E.filter,oninput:function(ev){E.filter=ev.target.value;E.limit=40;render(true);}}));
+  var fc2=h("div",{class:"fchips"});
+  var chipDef=[["all","Alle"]];
+  if(E.data.seasons.indexOf(0)>=0) chipDef.push([0,"Specials"]);
+  E.data.seasons.filter(function(n){return n>0;}).forEach(function(n){chipDef.push([n,"Staffel "+n]);});
+  chipDef.forEach(function(cd){
+    fc2.appendChild(h("button",{class:"fchip",type:"button","aria-pressed":E.season===cd[0]?"true":"false",text:cd[1],onclick:function(){E.season=cd[0];E.limit=40;render();}}));
+  });
+  box.appendChild(fc2);
+  var list=epMatches();
+  box.appendChild(h("div",{class:"sub",role:"status",text:list.length+(list.length===1?" Folge":" Folgen")+(list.length!==E.data.eps.length?" von "+E.data.eps.length:"")}));
+  var ul=h("ul",{class:"eplist"});
+  list.slice(0,E.limit).forEach(function(e){ul.appendChild(epItem(e));});
+  box.appendChild(ul);
+  if(list.length>E.limit) box.appendChild(h("button",{class:"iconbtn",text:"Mehr anzeigen ("+(list.length-E.limit)+" weitere)",onclick:function(){E.limit+=60;render();}}));
+  if(!list.length) box.appendChild(h("div",{class:"msg",text:"Nichts gefunden. Die Beschreibungen kommen von TMDB und sind bei manchen Folgen kurz oder fehlen. Probier ein anderes oder kürzeres Stichwort."}));
+  return box;
+}
+
+/* Sortierung: naechster Termin zuerst, dann zuletzt gelaufene, Beendete ganz unten */
+function sortKey(d){
+  if(!d) return [3,0];
+  var v=view(d);
+  if(v.next) return [0,parseDay(v.next.date).getTime()];
+  var ended=(d.status==="Ended"||d.status==="Canceled"||d.status==="Released");
+  if(ended) return [2,v.last?-parseDay(v.last.date).getTime():0];
+  return [1,v.last?-parseDay(v.last.date).getTime():0];
+}
+function sortedShows(){
+  return S.shows.slice().sort(function(a,b){
+    var ka=sortKey(S.cache[K(a)]&&S.cache[K(a)].d), kb=sortKey(S.cache[K(b)]&&S.cache[K(b)].d);
+    return ka[0]-kb[0] || ka[1]-kb[1] || a.name.localeCompare(b.name,"de");
+  });
+}
+
+/* Anzeige */
+var STATUS={"Returning Series":"Läuft noch","Ended":"Abgeschlossen","Canceled":"Abgesetzt","In Production":"In Produktion","Planned":"Geplant","Pilot":"Pilotfolge","Released":"Erschienen","Post Production":"Postproduktion","Rumored":"Gerücht"};
+var KINDTXT={kino:"Kinostart",digital:"Digital-Start",welt:"Filmstart (weltweit)"};
+function runtimeText(m){ if(!m) return ""; var hh=Math.floor(m/60), mm=m%60; return (hh?hh+" Std. ":"")+(mm?mm+" Min.":"").trim(); }
+function kindLabel(p){
+  p.kinds=p.kinds||[];
+  if(p.kinds.indexOf("flatrate")>=0) return "im Abo";
+  if(p.kinds.indexOf("free")>=0) return "gratis";
+  if(p.kinds.indexOf("ads")>=0) return "gratis mit Werbung";
+  var r=p.kinds.indexOf("rent")>=0, b=p.kinds.indexOf("buy")>=0;
+  return r&&b?"kaufen/leihen":(r?"leihen":"kaufen");
+}
+function chipsFor(d,max){
+  var chips=h("div",{class:"chips"});
+  if(!d||d.fail) return chips;
+  if(d.provs.length){
+    d.provs.slice(0,max).forEach(function(p){chips.appendChild(h("span",{class:"chip"+(p.mine?" mine":(p.incl?"":" paid")),text:p.name+" · "+kindLabel(p)}));});
+    if(d.provs.length>max) chips.appendChild(h("span",{class:"chip",text:"+"+(d.provs.length-max)+" weitere"}));
+  } else chips.appendChild(h("span",{class:"chip",text:"Kein Streamingdienst in Deutschland gefunden"}));
+  return chips;
+}
+function statusText(d){
+  if(!d) return "";
+  var st=STATUS[d.status]||"";
+  if(d.type==="movie") return ["Film",st,runtimeText(d.runtime)].filter(Boolean).join(" · ");
+  return ["Serie",st,d.seasons?d.seasons+(d.seasons===1?" Staffel":" Staffeln"):""].filter(Boolean).join(" · ");
+}
+function epLabel(x){ return "Staffel "+x.s+", Folge "+x.e+(x.title?" · "+x.title:""); }
+
+function showCard(s){
+  var c=S.cache[K(s)], d=c&&c.d, v=view(d);
+  var pill=null, when=null, sub=null;
+  if(!d){ pill=h("span",{class:"pill off",text:"Wird geladen"}); }
+  else if(d.type==="movie"){
+    var evtxt=(d.events||[]).map(function(e){return (e.kind==="kino"?"Kino":e.kind==="digital"?"Digital":"Weltweit")+": "+parseDay(e.date).toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric"});}).join(" · ");
+    if(v.next){
+      var nm=diffDays(parseDay(v.next.date));
+      pill=h("span",{class:"pill "+(nm<=7?"soon":"ok"),text:KINDTXT[v.next.kind]});
+      when=h("span",{class:"when",text:fmt(parseDay(v.next.date))+" ("+rel(nm)+")"});
+    } else if(v.last&&diffDays(parseDay(v.last.date))>=-14){
+      pill=h("span",{class:"pill new",text:"Neu erschienen"});
+      when=h("span",{class:"when",text:KINDTXT[v.last.kind]+": "+fmt(parseDay(v.last.date))});
+    } else if(v.last){
+      pill=h("span",{class:"pill off",text:"Erschienen"});
+      when=h("span",{class:"when",text:fmt(parseDay(v.last.date))});
+    } else pill=h("span",{class:"pill off",text:"Kein Termin bekannt"});
+    if(evtxt) sub=h("div",{class:"sub",text:evtxt});
+  }
+  else if(v.next){
+    var n=diffDays(parseDay(v.next.date));
+    var newSeason=v.next.e===1;
+    pill=h("span",{class:"pill "+(n<=7?"soon":"ok"),text:newSeason?"Neue Staffel "+v.next.s:"Neue Folge"});
+    when=h("span",{class:"when",text:fmt(parseDay(v.next.date))+" ("+rel(n)+")"});
+    sub=h("div",{class:"sub",text:epLabel(v.next)});
+  } else {
+    var ended=(d.status==="Ended"||d.status==="Canceled");
+    var recent=v.last&&diffDays(parseDay(v.last.date))>=-7;
+    if(recent){
+      pill=h("span",{class:"pill new",text:"Neu verfügbar"});
+      when=h("span",{class:"when",text:fmt(parseDay(v.last.date))+" ("+rel(diffDays(parseDay(v.last.date)))+")"});
+      sub=h("div",{class:"sub",text:epLabel(v.last)});
+    } else if(ended){
+      pill=h("span",{class:"pill off",text:d.status==="Canceled"?"Abgesetzt":"Beendet"});
+      if(v.last) sub=h("div",{class:"sub",text:"Letzte Folge: "+fmt(parseDay(v.last.date))});
+    } else {
+      pill=h("span",{class:"pill off",text:"Kein Termin bekannt"});
+      if(v.last) sub=h("div",{class:"sub",text:"Letzte Folge: "+fmt(parseDay(v.last.date))+" ("+epLabel(v.last)+")"});
+    }
+  }
+  var chips=chipsFor(d,99);
+  var sure=ui.confirm===K(s);
+  var poster=(d&&d.poster)||s.poster;
+  return h("li",{class:"show"},[
+    poster?h("img",{class:"poster",src:IMG+"w185"+poster,alt:"",loading:"lazy"}):h("div",{class:"poster"}),
+    h("div",{class:"body"},[
+      h("div",{class:"top"},[
+        h("h2",{text:s.name}),
+        h("button",{class:"rm"+(sure?" sure":""),text:sure?"Wirklich entfernen?":"Entfernen",onclick:function(){
+          if(ui.confirm===K(s)){
+            S.shows=S.shows.filter(function(x){return K(x)!==K(s);}); delete S.cache[K(s)]; ui.confirm=null; save();
+          } else ui.confirm=K(s);
+          render();
+        }})
+      ]),
+      h("div",{class:"next"},[pill,when]),
+      sub,
+      statusText(d)?h("div",{class:"sub",text:statusText(d)}):null,
+      chips,
+      s.type!=="movie"?h("button",{class:"linkbtn",type:"button",text:"Folgen durchsuchen",onclick:function(){ui.view="eps";selectSeries(s);}}):null
+    ])
+  ]);
+}
+
+function setupView(){
+  var inp=h("input",{id:"keyinput",type:"text",autocomplete:"off",autocapitalize:"off",spellcheck:"false",placeholder:"API-Schlüssel hier einfügen",value:S.key});
+  var msg=h("div",{class:"msg"+(ui.keyErr?" err":""),text:ui.keyMsg});
+  return h("div",{class:"setup"},[
+    h("h2",{text:"Einmalig einrichten",style:"margin:0;font-size:1.1rem"}),
+    h("div",{text:"Die Daten zu Serien und Filmen kommen von The Movie Database (TMDB). Dafür brauchst du einen kostenlosen Schlüssel:"}),
+    h("ol",null,[
+      h("li",null,["Auf ",h("a",{href:"https://www.themoviedb.org/signup",target:"_blank",rel:"noopener",text:"themoviedb.org/signup"})," ein Konto anlegen und die E-Mail bestätigen."]),
+      h("li",null,["Dann ",h("a",{href:"https://www.themoviedb.org/settings/api",target:"_blank",rel:"noopener",text:"themoviedb.org/settings/api"})," öffnen und einen Schlüssel beantragen (Verwendung: persönlich, nicht kommerziell)."]),
+      h("li",{text:"Den „API-Schlüssel“ (die kurze Zeichenfolge) kopieren und hier einfügen."})
+    ]),
+    inp,
+    h("button",{class:"primary",text:"Schlüssel prüfen und speichern",onclick:function(){
+      var k=inp.value.trim(); if(!k){ui.keyMsg="Bitte einen Schlüssel einfügen.";ui.keyErr=true;render();return;}
+      var old=S.key; S.key=k; ui.keyMsg="Prüfe …"; ui.keyErr=false; render();
+      api("/configuration").then(function(){ ui.keyMsg="";ui.settings=false;save();render();refreshAll(true); })
+        .catch(function(e){ S.key=old; ui.keyErr=true; ui.keyMsg=e.message==="key"?"Dieser Schlüssel wird nicht akzeptiert.":"Keine Verbindung zu TMDB. Internet prüfen und nochmal versuchen."; render(); });
+    }}),
+    msg
+  ]);
+}
+
+function settingsView(){
+  var fileIn=h("input",{id:"importfile",type:"file",accept:"application/json,.json",style:"display:none",onchange:function(ev){
+    var f=ev.target.files[0]; if(!f) return;
+    var r=new FileReader();
+    r.onload=function(){
+      try{
+        var o=JSON.parse(r.result);
+        if(!o||!Array.isArray(o.shows)) throw new Error("x");
+        S.shows=o.shows.filter(function(s){return s&&s.id&&s.name;}).map(function(s){return {id:s.id,type:s.type==="movie"?"movie":"tv",name:s.name,poster:s.poster||""};});
+        if(o.key) S.key=o.key;
+        S.cache={}; save(); ui.msg="Import ok: "+S.shows.length+" Titel."; ui.settings=false; render(); refreshAll(true);
+      }catch(e){ ui.err="Die Datei konnte nicht gelesen werden."; render(); }
+    };
+    r.readAsText(f);
+  }});
+  return h("div",{class:"sheet"},[
+    h("h3",{text:"Einstellungen"}),
+    h("div",{class:"msg",text:"Region: Deutschland. Grün: bei Netflix, Prime Video, Disney+, Apple TV+, HBO, Joyn oder WOW im Abo bzw. gratis. Grau: bei anderen Diensten im Abo oder gratis. Gelb: nur gegen Extrakosten (kaufen oder leihen)."}),
+    h("div",{class:"row"},[
+      h("button",{class:"iconbtn",text:"Alles neu laden",onclick:function(){ui.settings=false;refreshAll(true);}}),
+      h("button",{class:"iconbtn",text:"Liste sichern",onclick:function(){
+        var blob=new Blob([JSON.stringify({key:S.key,shows:S.shows},null,1)],{type:"application/json"});
+        var a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="serienradar-sicherung.json";
+        document.body.appendChild(a); a.click(); a.remove();
+      }}),
+      h("button",{class:"iconbtn",text:"Liste laden",onclick:function(){fileIn.click();}}),
+      fileIn
+    ]),
+    h("div",{class:"msg",text:"Die Sicherung enthält auch deinen API-Schlüssel. Nicht weitergeben."}),
+    h("h3",{text:"API-Schlüssel ändern"}),
+    setupView()
+  ]);
+}
+
+var debounce=null;
+function doSearch(q){
+  ui.query=q;
+  if(!q.trim()){ui.results=null;ui.searching=false;render();return;}
+  clearTimeout(debounce);
+  debounce=setTimeout(function(){
+    ui.searching=true; render(true);
+    api("/search/multi",{query:q.trim()}).then(function(r){
+      if(ui.query!==q) return;
+      ui.results=(r.results||[]).filter(function(x){return x.media_type==="tv"||x.media_type==="movie";}).slice(0,8).map(function(x){
+        return {id:x.id,type:x.media_type==="movie"?"movie":"tv",name:x.name||x.title||"",orig:x.original_name||x.original_title||"",
+          date:x.first_air_date||x.release_date||"",poster_path:x.poster_path,overview:x.overview,origin_country:x.origin_country};
+      }); ui.searching=false; ui.err=""; loadDetails(ui.results); render(true);
+    }).catch(function(e){
+      ui.searching=false; ui.err=e.message==="key"?"Der API-Schlüssel wird nicht akzeptiert.":"Die Suche hat nicht geklappt. Internet prüfen."; render(true);
+    });
+  },350);
+}
+function loadDetails(list){
+  list.forEach(function(r){
+    var k=K(r);
+    if(ui.details[k]) return;
+    var c=S.cache[k];
+    if(c&&c.d&&c.d.v===3){ ui.details[k]=c.d; return; }
+    fetchDetail(r).then(function(d){
+      ui.details[k]=d; scheduleRender();
+    }).catch(function(){ ui.details[k]={fail:true}; });
+  });
+}
+function scheduleRender(){
+  if(ui.rt) return;
+  ui.rt=setTimeout(function(){ ui.rt=null; if(ui.query.trim()) render(true); },300);
+}
+function isAdded(r){ return S.shows.some(function(s){return K(s)===K(r);}); }
+function addShow(r){
+  if(isAdded(r)) return;
+  S.shows.push({id:r.id,type:r.type,name:r.name,poster:r.poster_path||""}); save();
+  ui.query=""; ui.results=null; ui.msg="„"+r.name+"“ hinzugefügt.";
+  render();
+  refreshOne(r).then(function(){save();render();}).catch(function(){ui.err="Daten zu „"+r.name+"“ konnten nicht geladen werden.";render();});
+}
+
+function resultsView(){
+  var box=h("div",{class:"results"});
+  if(ui.searching){ box.appendChild(h("div",{class:"msg",style:"padding:12px",text:"Suche …"})); return box; }
+  if(!ui.results||!ui.results.length){ box.appendChild(h("div",{class:"msg",style:"padding:12px",text:"Keine Treffer."})); return box; }
+  ui.results.forEach(function(r){
+    var added=isAdded(r), year=(r.date||"").slice(0,4), det=ui.details[K(r)];
+    box.appendChild(h("button",{class:"res",type:"button",onclick:function(){addShow(r);}},[
+      r.poster_path?h("img",{class:"thumb",src:IMG+"w92"+r.poster_path,alt:""}):h("div",{class:"thumb"}),
+      h("div",{class:"t"},[h("b",{text:r.name}),h("span",{text:(r.type==="movie"?"Film":"Serie")+" · "+(year?year:"Jahr unbekannt")+((r.origin_country&&r.origin_country.length)?" · "+r.origin_country.join(", "):"")+(r.orig&&r.orig!==r.name?" · "+r.orig:"")}),
+        r.overview?h("div",{class:"ov",text:r.overview}):null,
+        det&&!det.fail?h("div",{class:"sub",style:"margin-top:4px",text:statusText(det)}):null,
+        det&&!det.fail?chipsFor(det,4):null]),
+      h("span",{class:"add"+(added?" done":""),text:added?"Auf der Liste":"+ Hinzufügen"})
+    ]));
+  });
+  return box;
+}
+
+function render(keepFocus){
+  var active=document.activeElement, fid=active&&active.id, hadSearch=(fid==="q"||fid==="eq"||fid==="ef"), pos=hadSearch?active.selectionStart:0;
+  app.textContent="";
+  app.appendChild(h("header",null,[
+    h("h1",{text:"Serienradar"}),
+    h("button",{class:"iconbtn",text:ui.settings?"Schließen":"Einstellungen",onclick:function(){ui.settings=!ui.settings;ui.keyMsg="";render();}})
+  ]));
+  if(!S.key){ app.appendChild(setupView()); app.appendChild(footer()); return; }
+  if(ui.settings) app.appendChild(settingsView());
+  app.appendChild(h("div",{class:"tabs",role:"group","aria-label":"Ansicht"},[
+    h("button",{class:"tab",type:"button","aria-pressed":ui.view==="list"?"true":"false",text:"Meine Liste",onclick:function(){ui.view="list";render();}}),
+    h("button",{class:"tab",type:"button","aria-pressed":ui.view==="eps"?"true":"false",text:"Folgensuche",onclick:function(){ui.view="eps";render();}})
+  ]));
+  if(ui.view==="eps"){
+    app.appendChild(epsView()); app.appendChild(footer());
+    if(hadSearch||keepFocus){ var m=document.getElementById(fid); if(m){m.focus(); try{m.setSelectionRange(pos,pos);}catch(e){}} }
+    return;
+  }
+
+  var inp=h("input",{id:"q",type:"search",placeholder:"Serie oder Film suchen …",autocomplete:"off",value:ui.query,
+    oninput:function(e){doSearch(e.target.value);}});
+  app.appendChild(h("div",{class:"search"},[inp, (ui.query.trim()?resultsView():null)]));
+
+  if(ui.err) app.appendChild(h("div",{class:"msg err",role:"alert",text:ui.err}));
+  else if(ui.msg) app.appendChild(h("div",{class:"msg",role:"status",text:ui.msg}));
+
+  if(!S.shows.length){
+    app.appendChild(h("div",{class:"empty"},[
+      h("b",{text:"Noch nichts auf der Liste"}),
+      h("div",{class:"msg",text:"Tippe oben einen Titel ein, zum Beispiel „The Last of Us“, und wähle Serie oder Film aus. Danach siehst du hier, wann die nächste Folge oder der Film kommt und wo du es schauen kannst."})
+    ]));
+  } else {
+    var times=S.shows.map(function(s){return S.cache[K(s)]?S.cache[K(s)].t:0;}).filter(Boolean);
+    var upd=times.length?new Date(Math.min.apply(null,times)).toLocaleString("de-DE",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}):"noch nie";
+    app.appendChild(h("div",{class:"bar"},[
+      h("span",{class:"sub",text:S.shows.length+" Titel · Stand "+upd}),
+      h("button",{class:"iconbtn",disabled:ui.refreshing,text:ui.refreshing?"Lädt …":"Aktualisieren",onclick:function(){ui.msg="";refreshAll(true);}})
+    ]));
+    var ul=h("ul",{class:"list"});
+    sortedShows().forEach(function(s){
+      try{ ul.appendChild(showCard(s)); }
+      catch(e){ ul.appendChild(h("li",{class:"show"},[h("div",{class:"body"},[h("h2",{text:s.name}),h("div",{class:"sub",text:"Daten werden neu geladen …"})])])); delete S.cache[K(s)]; }
+    });
+    app.appendChild(ul);
+  }
+  app.appendChild(footer());
+  if(hadSearch||keepFocus){ var n=document.getElementById(fid||"q"); if(n){n.focus(); try{n.setSelectionRange(pos,pos);}catch(e){}} }
+}
+function footer(){
+  return h("footer",null,["Daten: TMDB. Streaming-Infos: JustWatch (über TMDB). Dieses Produkt nutzt die TMDB-API, wird aber von TMDB nicht unterstützt oder zertifiziert."]);
+}
+
+render();
+refreshAll(false);
+if("serviceWorker" in navigator && location.protocol.indexOf("http")===0){ try{ navigator.serviceWorker.register("sw.js").catch(function(){}); }catch(e){} }
+document.addEventListener("visibilitychange",function(){ if(!document.hidden) refreshAll(false); });
+})();
+</script>
+</body>
+</html>
